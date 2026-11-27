@@ -1,0 +1,6 @@
+# Ollama model for the drafting step (queries/draft_needs.py).
+# A 16,384-token context so that a chunk plus the prompt plus the answer fit, temperature 0. qwen3:14b is Q4_K_M, about 9 GB, so Ollama keeps part of it on the processor.
+# Create it once with:  ollama create qwen3-14b-16k -f Modelfile-qwen3-14b-16k
+FROM qwen3:14b
+PARAMETER num_ctx 16384
+PARAMETER temperature 0

@@ -1,0 +1,40 @@
+[
+  {
+    "name": "gptoss120b",
+    "note": "RULES.md section 4, version 7 (2026-11-20). OpenAI family: gpt-oss-120b in its released MXFP4 (OpenRouter calls it fp4); reasons before answering, effort medium (the default of Keller et al. 2026 and the TREC 2025 RAG ensemble), with room for the reasoning. Providers: the cheapest that serves fp4 and accepts the seed and the reasoning setting, as listed on 2026-11-20, then the next one; no other.",
+    "model": "openai/gpt-oss-120b",
+    "precision": "mxfp4",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "max_tokens": 4096,
+    "concurrency": 16,
+    "extra": {"reasoning": {"effort": "medium"},
+              "provider": {"order": ["near-ai/fp4", "coreweave/fp4"], "allow_fallbacks": false,
+                           "require_parameters": true, "quantizations": ["fp4"]}}
+  },
+  {
+    "name": "llama33_70b",
+    "note": "RULES.md section 4, version 7. Meta family: Llama-3.3-70B-Instruct, released in bf16; no provider serves bf16, so fp16, the only 16-bit offer, as listed on 2026-11-20. No reasoning step.",
+    "model": "meta-llama/llama-3.3-70b-instruct",
+    "precision": "fp16",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "max_tokens": 16,
+    "concurrency": 16,
+    "extra": {"provider": {"order": ["coreweave/fp16"], "allow_fallbacks": false,
+                           "require_parameters": true, "quantizations": ["fp16"]}}
+  },
+  {
+    "name": "deepseekv32",
+    "note": "RULES.md section 4, version 7. DeepSeek family: DeepSeek-V3.2 in its released fp8, thinking off (its default on OpenRouter). Providers: the cheapest that serves fp8 and accepts and applies the seed and the reasoning setting, as listed on 2026-11-20, then the next one; no other. GMICloud, cheaper, does not apply 'thinking off' (model_selection/openrouter_2026-11-20/deepseek_thinking_test.txt).",
+    "model": "deepseek/deepseek-v3.2",
+    "precision": "fp8",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "max_tokens": 16,
+    "concurrency": 16,
+    "extra": {"reasoning": {"enabled": false},
+              "provider": {"order": ["atlas-cloud/fp8", "baidu/fp8"], "allow_fallbacks": false,
+                           "require_parameters": true, "quantizations": ["fp8"]}}
+  }
+]

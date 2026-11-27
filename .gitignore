@@ -1,0 +1,8 @@
+﻿.venv/
+.venv-judge/
+__pycache__/
+*.pyc
+work/
+data/
+paper-code/tests/toy/
+paper-code/release_build/

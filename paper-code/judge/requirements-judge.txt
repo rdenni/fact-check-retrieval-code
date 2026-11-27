@@ -1,0 +1,7 @@
+# The GPU machine only (Linux, NVIDIA card): what judge/run_judges.py needs.
+# vLLM is not pinned on purpose: the newest release supports the newest models and cards; the version that ran
+# is written into every run_<judge>.json (environment.versions) and goes into the paper.
+# vLLM brings torch, transformers and huggingface_hub with it.
+vllm
+requests>=2.31
+tqdm>=4.66

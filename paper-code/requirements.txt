@@ -1,0 +1,26 @@
+# paper-code requirements (Python 3.11 or 3.12; Windows and Linux)
+# requirements-paper.txt lists the exact version of every package of the environment of the paper's runs.
+# Tested versions on 2026-09-18 (Linux, CPU): numpy 2.5.3, scipy 1.18.1, bm25s 0.3.11, PyStemmer 3.x,
+# ir_measures 0.4.3, pyoxigraph 0.5.11, torch 2.14.0, transformers 5.17.0, requests 2.31, tqdm 4.67.
+# Tested versions on 2026-10-02 (Windows 11, Python 3.11.0 64-bit, RTX 4070 Laptop, toy test OK): numpy 2.4.6,
+# scipy 1.17.1, bm25s 0.3.11, PyStemmer 3.1.0, ir_measures 0.4.3, pyoxigraph 0.5.11, torch 2.14.1+cu130,
+# transformers 5.18.0, huggingface_hub 1.33.0, requests 2.34.2, tqdm 4.70.1, pip 26.2.1.
+numpy>=2.0
+scipy>=1.13
+bm25s==0.3.11          # the version the paper names (BM25 scores and ties depend on it)
+PyStemmer==3.1.0       # the version the paper names (the stems decide which words match)
+ir_measures>=0.3.6
+pyoxigraph>=0.4
+requests>=2.31
+tqdm>=4.66
+huggingface_hub>=0.24
+transformers>=4.51     # Qwen3 needs >= 4.51
+langdetect==1.0.9      # the language rule of snapshot/language_rule.py; pinned exactly because the decisions must be reproducible
+openpyxl>=3.1          # the writers' Excel sheets (queries/import_formulas.py)
+matplotlib>=3.8        # stats/plot_archive.py, the figures and the numbers.tex of the paper
+# torch: install the build for your machine BEFORE this file (pip then leaves it alone), because the plain
+# PyPI wheel for Windows cannot use the graphics card. Windows + CUDA 13.x (verified 2026-10-02):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu130
+# CPU only (tests): pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
+# Optional, Linux only: flash-attn (then pass --attn flash_attention_2); vllm for the AI judge (judge/requirements-judge.txt).

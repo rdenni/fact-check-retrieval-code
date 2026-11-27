@@ -1,0 +1,15 @@
+DeepSeek-V3.2 through OpenRouter, 2026-11-20 evening: does the provider apply "thinking off"?
+A neutral question, not a pair of the pool ("Answer with one word, YES or NO. Query: The moon is made of cheese.
+Claim: Astronauts found that the moon is made of cheese."), temperature 0, seed 42, max_tokens 16, fp8, one provider
+at a time with no fallback and require_parameters true; the reasoning setting sent in two ways.
+
+provider          setting                        completion tokens   reasoning tokens   reply
+gmicloud/fp8      reasoning: {enabled: false}    481                 477                NO
+gmicloud/fp8      reasoning: {effort: "none"}    562                 558                NO
+atlas-cloud/fp8   reasoning: {enabled: false}    2                   0                  NO
+atlas-cloud/fp8   reasoning: {effort: "none"}    2                   0                  NO
+baidu/fp8         reasoning: {enabled: false}    2                   0                  NO
+baidu/fp8         reasoning: {effort: "none"}    2                   0                  NO
+
+GMICloud lists the reasoning parameter as supported but does not apply it: it thinks whatever is sent, and its
+thinking is not cut by max_tokens. Its 3 labels of the first test (100, 332 and 1,034 reasoning tokens) were deleted.
