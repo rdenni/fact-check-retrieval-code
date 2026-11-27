@@ -15,7 +15,11 @@ Copies into --out:
   documents.jsonl                 doc_id, date, publisher and the claim text cut at --text-chars (300);
                                   no explanation bodies (CimpleKG is CC BY-NC-SA 4.0; we redistribute ids and short claim texts)
   labels/agreement.md, judge/validation.md, eval/*.md  (when present)
-  MODELS.md, LICENSE, reproduce.sh, CHECKSUMS.sha256
+  README.md (release/README-DATA.md: what every file holds), MODELS.md, LICENSE, reproduce.sh, CHECKSUMS.sha256
+  drafting_model.json (with --drafting DIR, the folder of the drafting run): the model that drafted the candidates, as
+                                  every raw reply recorded it: the model name, its precision, the Ollama version, the
+                                  model's digest (the checksum of the model file), the pdftotext version and the sha256
+                                  of the prompt, with the number of replies; no reply and no text of a report
   writers/ (with --writers DIR, the folder of the writers' sheets):
     wikipedia_redirects.json, wikipedia_incoming_redirects.json, wikipedia_disambiguation.json
                                   Wikipedia's answers the import and the title check used, so that both can be
@@ -43,13 +47,13 @@ Copies into --out:
                                   document: folder, country, years, tier, label, url, content type, bytes, sha256, fetch
                                   date (Section 5: "the released source list"); the free note and the local status are left out
   --humans ID1,ID2               the human judges' ids in the work folder, in the order the paper numbers them: in the
-                                  release they are H1 and H2, as in the paper (the label files' names and their annotator
-                                  field, check.json, and the three reports that name them: labels/agreement.md,
-                                  judge/validation.md, pool/pool_summary.md)
+                                  release they are H1 and H2, as in the paper (the label files' names, their annotator
+                                  field and the name of the sheet each label came from, check.json, and the three reports
+                                  that name them: labels/agreement.md, judge/validation.md, pool/pool_summary.md)
 Never released: the drafting files (raw replies, candidates, merged clusters, review log, draw report), which quote
 the reports. The writers' instruction is in the code (queries/FORMULA-INSTRUCTION.md), not in this export.
 Usage: python release/export_release.py --work WORK --queries Q.json --out release_build [--text-chars 300] [--writers DIR] [--snap DIR]
-       [--sources FILE] [--humans ID1,ID2]
+       [--sources FILE] [--humans ID1,ID2] [--drafting DIR] [--code-url URL]
 """
 from __future__ import annotations
 
@@ -106,6 +110,36 @@ def rename_humans(text: str, names: dict[str, str]) -> str:
     return re.sub(rf"(?<![\w@.])({alt})(?![\w@.])", lambda m: names[m.group(1)], text)
 
 
+def rename_sheet(name: str, names: dict[str, str]) -> str:
+    """The judge's id inside the name of a sheet file: sheet_R.xlsx -> sheet_H1.xlsx, sheet_M_round2.xlsx -> sheet_H2_round2.xlsx."""
+    for k in sorted(names, key=len, reverse=True):
+        name = re.sub(rf"(?<=_){re.escape(k)}(?=[._])", names[k], name)
+    return name
+
+
+# the fields of a raw reply of queries/draft_needs.py that describe the software, never the reply or the text it read
+DRAFTING_FIELDS = ("model", "precision", "ollama_version", "model_digest", "pdftotext", "prompt_sha256", "reasoning",
+                   "max_tokens", "frequency_penalty")
+
+
+def drafting_model(raw_dir: Path) -> dict:
+    """The software state of the drafting run, from every raw reply (DIR/raw/<cell>/<file>.json): each distinct
+    combination of DRAFTING_FIELDS with its number of replies. A run mixes no two states (draft_needs.py refuses it)."""
+    states: dict[str, dict] = {}
+    files = sorted(raw_dir.rglob("*.json"))
+    if not files:
+        raise SystemExit(f"--drafting: no raw reply under {raw_dir}")
+    for f in files:
+        r = json.loads(f.read_text(encoding="utf-8"))
+        state = {k: r.get(k) for k in DRAFTING_FIELDS}
+        key = json.dumps(state, sort_keys=True)
+        states.setdefault(key, {**state, "replies": 0})["replies"] += 1
+    return {"what": "the model that drafted the candidate claims (queries/draft_needs.py), as every raw reply of the run "
+                    "recorded it; model_digest is Ollama's checksum of the model file, prompt_sha256 the checksum of the prompt "
+                    "(queries/prompts/draft_needs.txt) with its fields filled",
+            "modelfile": "queries/ollama/Modelfile-qwen3-14b-16k (in the code)", "states": list(states.values())}
+
+
 SNAP_FILES = (("mirror_manifest.json", "mirror_manifest.json"), ("final/snapshot_manifest.json", "snapshot_manifest.json"),
               ("final/language_decisions.jsonl", "language_decisions.jsonl"), ("ifcn_sources.json", "ifcn_sources.json"))
 
@@ -137,6 +171,9 @@ def main():
     ap.add_argument("--snap", default=None, help="the snapshot folder: mirror and snapshot manifests, language decisions, IFCN file")
     ap.add_argument("--sources", default=None, help="reports/sources-index.csv: the report list with addresses, fetch dates and checksums")
     ap.add_argument("--humans", default=None, help="the two human judges' ids, in the paper's order: released as H1 and H2")
+    ap.add_argument("--drafting", default=None, help="the folder of the drafting run (with raw/): writes drafting_model.json")
+    ap.add_argument("--code-url", default="the code repository named in the paper",
+                    help="the address of the code repository, written into the release's README")
     args = ap.parse_args()
     ids = [x.strip() for x in (args.humans or "").split(",") if x.strip()]
     if args.humans and len(ids) != 2:
@@ -169,7 +206,8 @@ def main():
         (out / "labels").mkdir(exist_ok=True)
         who = p.stem[len("labels_"):]
         name = f"labels_{humans[who]}.jsonl" if who in humans else p.name
-        write_jsonl(out / "labels" / name, ({k: (humans.get(v, v) if k == "annotator" else v) for k, v in r.items() if k not in LABEL_DROP}
+        write_jsonl(out / "labels" / name, ({k: (humans.get(v, v) if k == "annotator" else rename_sheet(v, humans) if k == "sheet" and isinstance(v, str)
+                                                 else v) for k, v in r.items() if k not in LABEL_DROP}
                                             for r in read_jsonl(p)))
     if humans:
         chk = out / "pool" / "check.json"
@@ -198,14 +236,15 @@ def main():
             if not (snap / src).exists():
                 raise SystemExit(f"--snap: missing {snap / src}")
             shutil.copy2(snap / src, out / "snapshot" / name)
-    for name in ("MODELS.md", "LICENSE", "reproduce.sh", "README.md"):
+    if args.drafting:
+        (out / "drafting_model.json").write_text(json.dumps(drafting_model(Path(args.drafting) / "raw"), indent=2, ensure_ascii=False) + "\n",
+                                                 encoding="utf-8", newline="\n")
+    for name in ("MODELS.md", "LICENSE", "reproduce.sh"):
         if (HERE / name).exists():
             shutil.copy2(HERE / name, out / name)
-    # the README's section marked 'local only' (about notes kept in the main repository, never released) is cut out
-    readme = out / "README.md"
-    if readme.exists():
-        readme.write_text(re.sub(r"(?s)<!-- local only: start -->.*?<!-- local only: end -->\n?", "", readme.read_text(encoding="utf-8")),
-                          encoding="utf-8", newline="\n")
+    # the README of the collection (what every file holds), not the README of the code; @CODE_URL@ becomes --code-url
+    readme = (HERE / "release" / "README-DATA.md").read_bytes().replace(b"\r\n", b"\n")
+    (out / "README.md").write_bytes(readme.replace(b"@CODE_URL@", args.code_url.encode("utf-8")))
     lines = []
     for p in sorted(out.rglob("*")):
         if p.is_file() and p.name != "CHECKSUMS.sha256":

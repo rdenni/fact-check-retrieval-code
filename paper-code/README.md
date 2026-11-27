@@ -1,7 +1,7 @@
-# Finding fact-checks about a narrative or a claim: the code
+# How well does entity search find fact-checks? A test collection and an evaluation on CimpleKG
 
-This is the code of the paper that measures how well entity search in the CimpleKG knowledge graph finds the
-fact-checks about a narrative or a claim, compared with text search. It builds the document collection from a dated
+This is the code of the paper "How well does entity search find fact-checks? A test collection and an evaluation on CimpleKG". The paper measures how well entity search in the CimpleKG
+knowledge graph finds the fact-checks about a narrative or a claim, compared with text search. It builds the document collection from a dated
 snapshot of CimpleKG, the queries from observer reports, the runs of the three systems, the pool, the judgments and
 the measures.
 
@@ -129,6 +129,6 @@ The paper's numbers: `stats/plot_archive.py`, `stats/paper_facts.py`, `stats/liv
 `reproduce_paper.py --snap SNAP --paper-figures DIR` rebuilds them all from the snapshot folder (the Oxigraph store, the
 N-Triples mirror and its manifest, the IFCN file, the query files and the work folder of the runs; the counts of the report sources also need the fetched reports, --reports DIR, or --skip-sources) and compares each
 with the paper's file of the same name in DIR; without `--paper-figures` it only rebuilds them. `release/export_release.py
---humans ID1,ID2` assembles the released collection (the queries, the formulas, the runs, the pool, the labels; no
+--humans ID1,ID2 --drafting DIR` assembles the released collection, with its own README (`release/README-DATA.md`) (the queries, the formulas, the runs, the pool, the labels; no
 quotation of the reports and no explanation texts; the two human judges are H1 and H2, as in the paper).
 

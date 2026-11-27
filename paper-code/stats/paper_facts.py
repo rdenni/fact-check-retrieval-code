@@ -59,6 +59,8 @@ SCRIPT_NAMES = {"DEVANAGARI": "Devanagari", "BENGALI": "Bengali", "MALAYALAM": "
                 "CJK": "Chinese", "KANNADA": "Kannada", "ORIYA": "Odia", "HANGUL": "Korean", "THAI": "Thai"}
 MIN_SHARE_LISTED = 0.01   # a publisher or a script is named in a list when it holds at least 1 % of the group
 LATIN_PAIR_MIN = 20       # a (publisher, language) pair of Latin-script removals is named when it has at least 20 documents
+SHARED_SHORT_CHARS = 1000  # rule 1: a shared explanation text under this many characters is a short one (see the claim check)
+SHARED_ORG_MIN_SHARE = 0.10  # an organisation is named among the holders of the long shared texts from this share of them
 EXAMPLE_SHORT_CLAIM = "Israel Nukes Beirut"   # the example of a short English claim the detector misreads
 NT_LINE = re.compile(r'^<([^>]*)> <([^>]*)> (.*) \.\s*$')
 NT_ESC = re.compile(r'\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[tbnrf"\'\\])')
@@ -285,6 +287,88 @@ def main():
     claim("Every removed claim and explanation was found in the mirror",
           all(cr in cr_claim for cr, rs in want_cr.items() if rs == "non_latin_claim"),
           f"{sum(1 for cr in want_cr if cr in cr_claim)} of {len(want_cr)} removed documents found with their claim")
+
+    # ---- rule 1: the explanation texts shared by scrapeMin or more fact-checks, read from the mirror ----
+    # The rule is meant for scraping failures (an error message stored in place of the explanation), but it removes every
+    # fact-check whose text is shared that widely, so the paper says what else it removes: the shared texts, split at
+    # SHARED_SHORT_CHARS characters, with the organisations that hold the long ones.
+    # One pass over the mirror. Of every explanation text only its checksum, its length and (when it is short) the text
+    # itself are kept: the file is 1.5 GB.
+    import hashlib
+    cr_key, key_len, key_text, cr_org, org_name = {}, {}, {}, {}, {}
+    cr_claim_iri, claim_node_text = {}, {}
+    p_text, p_author, p_name, p_item = f"<{kg.P_TEXT}>", f"<{kg.P_AUTHOR}>", f"<{kg.P_NAME}>", f"<{kg.P_ITEM_REVIEWED}>"
+    with open(args.mirror, encoding="utf-8") as fh:
+        for line in fh:
+            if ("schema.org/text>" not in line and "schema.org/author>" not in line and "schema.org/itemReviewed>" not in line
+                    and "/organization/" not in line):
+                continue
+            m = NT_LINE.match(line)
+            if not m:
+                continue
+            s, pred, o = m.group(1), f"<{m.group(2)}>", m.group(3)
+            if pred == p_text:
+                tx = nt_literal(o)
+                if tx is None:
+                    continue
+                if "/claim-review/" in s:
+                    k = hashlib.md5(tx.encode("utf-8")).digest()
+                    cr_key[s] = k
+                    if k not in key_len:
+                        key_len[k] = len(tx)
+                        key_text[k] = tx if len(tx) < SHARED_SHORT_CHARS else ""
+                else:
+                    claim_node_text[s] = tx
+            elif "/claim-review/" in s and pred == p_author:
+                cr_org[s] = o.strip("<>")
+            elif "/claim-review/" in s and pred == p_item:
+                cr_claim_iri[s] = o.strip("<>")
+            elif "/organization/" in s and pred == p_name:
+                org_name[s] = nt_literal(o)
+    by_key = defaultdict(list)
+    for cr, k in cr_key.items():
+        by_key[k].append(cr)
+    shared = {k: crs for k, crs in by_key.items() if len(crs) >= macros["scrapeMin"]}
+    short = {k: crs for k, crs in shared.items() if key_len[k] < SHARED_SHORT_CHARS}
+    long_ = {k: crs for k, crs in shared.items() if key_len[k] >= SHARED_SHORT_CHARS}
+    n_fc = lambda g: sum(len(v) for v in g.values())  # noqa: E731
+    macros["nSharedTexts"] = len(shared)
+    macros["nSharedTextsFc"] = n_fc(shared)
+    macros["sharedShortChars"] = f"{SHARED_SHORT_CHARS:,}"
+    macros["nSharedShortTexts"] = len(short)
+    macros["nSharedShortFc"] = n_fc(short)
+    macros["nSharedLongTexts"] = len(long_)
+    macros["nSharedLongFc"] = n_fc(long_)
+    lens = sorted(key_len[k] for k in long_)
+    macros["sharedLongMedianChars"] = f"{lens[len(lens) // 2]:,}" if lens else "n/a"
+    macros["sharedLongMinChars"] = f"{lens[0]:,}" if lens else "n/a"
+    macros["sharedShortMaxChars"] = f"{max((key_len[k] for k in short), default=0):,}"
+    org_fc = Counter(disp(org_name.get(cr_org.get(cr), "?")) for crs in long_.values() for cr in crs)
+    holders = [(o, n) for o, n in org_fc.most_common() if n >= SHARED_ORG_MIN_SHARE * max(n_fc(long_), 1)]
+    macros["sharedLongHolders"] = name_list([o for o, _ in holders])
+    macros["pctSharedLongHolders"] = 100.0 * sum(n for _, n in holders) / max(n_fc(long_), 1)
+    macros["pctSharedLongOfLoaded"] = 100.0 * n_fc(long_) / int(manifest["claimreviews_loaded"])
+    claim("The fact-checks that rule 1 removes are those whose explanation text is shared by scrapeMin or more fact-checks, as the store's manifest counts them",
+          n_fc(shared) == int(manifest["removed"]["scraping_failures"]),
+          f"mirror: {len(shared)} texts, {n_fc(shared)} fact-checks; store manifest removed {manifest['removed']['scraping_failures']}")
+    claim("The shared texts split cleanly at SHARED_SHORT_CHARS characters (every short one has at most 500 characters, every long one at least 2,000)",
+          all(key_len[k] <= 500 for k in short) and all(key_len[k] >= 2000 for k in long_),
+          f"short texts: {len(short)}, the longest {max((key_len[k] for k in short), default=0)} characters; long texts: {len(long_)}, the shortest {lens[0] if lens else 'n/a'}")
+    markers = {"connection errors": "Connection aborted", "a notice about advertisements": "online advertisements",
+               "a donation banner": "Stand up for the facts", "the word None": None}
+    found = {k: any((v in key_text[x] if v else key_text[x] == "None") for x in short) for k, v in markers.items()}
+    claim("Among the short shared texts are connection errors, a notice about advertisements, a donation banner and the word None",
+          all(found.values()), f"found: {found}; the short texts begin: " + "; ".join(repr(" ".join(key_text[x].split())[:40]) for x in sorted(short, key=lambda x: key_len[x])))
+    claim("Most of the long shared texts are held by two or three organisations",
+          bool(holders) and sum(n for _, n in holders) >= 0.8 * n_fc(long_),
+          f"holders of the {n_fc(long_)} fact-checks with a long shared text: {dict(org_fc.most_common(4))}")
+    per_group = [len({claim_node_text.get(cr_claim_iri.get(cr)) for cr in crs}) for crs in long_.values()]
+    distinct = sum(per_group)
+    claim("The fact-checks that share a long text are about different claims: CimpleKG gave each claim of an article its own fact-check",
+          bool(per_group) and min(per_group) > 1 and distinct >= 0.9 * n_fc(long_),
+          f"{distinct} different claim texts among the {n_fc(long_)} fact-checks of the {len(long_)} long shared texts; "
+          f"the fewest different claim texts in one group: {min(per_group) if per_group else 'n/a'}")
+    del cr_key, by_key, claim_node_text, cr_claim_iri
 
     # ---- IFCN status, the stopped feeds (from plot_archive.py's figures.json), the organisations with two names ----
     status = {}
